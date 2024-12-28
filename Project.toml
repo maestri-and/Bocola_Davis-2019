@@ -1,2 +1,4 @@
 [deps]
+Infiltrator = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
+IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
