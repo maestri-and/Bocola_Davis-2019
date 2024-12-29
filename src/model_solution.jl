@@ -180,19 +180,20 @@ extra2[2,1]= bounds[2,2]-bounds[2,1]
 extra2[3,1]= bounds[3,2]-bounds[3,1]
 
 # Define the `x_prime` matrix and initialize necessary variables
-x_prime = zeros(state_ex, 1)
+
 
 # Part 1: Loop over N_ex and N_p
 for i in 1:N_ex
     for j in 1:N_p
+        x_prime = zeros(state_ex, 1)
         x_prime[1, 1] = rho_y * y_y[i] + sqrt(2) * sigma_y * points[1, j] + sqrt(2) * sigma_yk * points[2, j]
         x_prime[2, 1] = mu_chi + rho_chi * chi_y[i] + sqrt(2) * sigma_chi * points[2, j]
         x_prime[3, 1] = exp(pi_star + sqrt(2) * sigma_pi * points[3, j]) / (1 + exp(pi_star + sqrt(2) * sigma_pi * points[3, j]))
 
-        y_prime .= (2 * (x_prime .- ss) .- extra) ./ extra2
-        y_prime .= clamp.(y_prime, -1.0, 1.0)
+        y_prime = (2 * (x_prime .- ss) .- extra) ./ extra2
+        y_prime = clamp.(y_prime, -1.0, 1.0)
 
-        y_prime_TP .= transpose(y_prime)
+        y_prime_TP = transpose(y_prime)
 
         Tgen!(TTT1[i, j, :, :], y_prime_TP, N, state_ex, N_ex)
     end
@@ -214,10 +215,10 @@ for i in 1:N_price
 
         # 4. Calculate y_prime with constraints
         y_prime = (2 .* (x_prime .- ss) .- extra) ./ extra2
-        y_prime .= clamp.(y_prime, -1.0, 1.0)  # Clamping values between -1 and 1
+        y_prime = clamp.(y_prime, -1.0, 1.0)  # Clamping values between -1 and 1
 
         # 5. Transpose y_prime
-        y_prime_TP .= transpose(y_prime)
+        y_prime_TP = transpose(y_prime)
 
         # 6. Call the Tgen function with the current values
         Tgen!(TTT2[i, j, :, :], y_prime_TP, N, state_ex, N_ex)
@@ -239,5 +240,110 @@ index_ck, index_ex1, index_ex2 = locator(coll_points, coll_price, bounds, ss,
 #------------------------------------------------------------------------------
 # 4. SOLVE MODEL!
 #------------------------------------------------------------------------------
+
+q_new       = q_old
+bprime      = bprime_old
+qeq_old     = 0
+lamprime    = lamprime_old
+iter        = 1
+start       = omp_get_wtime ( )
+aa          = 0
+ex          = 0
+weight_q    = 0  
+
+while (aa==0 && iter<max_iter)
+
+    update_values!(gamma_pnew, gamma_anew, gamma_cknew, 
+    bprime, lamprime, debt_choice, maturity_choice, 
+    q_old, gamma_p, gamma_a, gamma_ck, coll_points, 
+    InvTT, bounds, ss, coll_price, price_index, 
+    Bline, debt, lam, weights, points, TTT1, 
+    index_s, index_ck, N_sl, N_su)
+
+    update_price!(q_new, q_old, gamma_p, gamma_a, gamma_ck, 
+    coll_points, coll_price, bounds, ss, price_index, 
+    Bline, lam, debt, weightsq, pointsq, 
+    bprime_old, lamprime_old, TTT2, 
+    index_s, index_ex1, index_ex2, s_prime, 
+    points_qy, points_qchi, points_qpi, 
+    points_y, points_chi, points_pi)
+
+    if (iter==start_conv)
+        weight_q = convergence_q 
+    end
+
+    if (iter>=start_conv)  
+        weight_q = min(weight_q+(0.001/100),0.9995)
+    end 
+
+    # Initialize or reset `start` before the loop if needed
+    start = time()
+
+    # Loop body 
+    for iter in 1:max_iterations  # assuming a max iteration limit
+
+        # Update values with matrix multiplication
+        for j in 1:N_b
+            value_paynew[:, :, j]  .= matmul(reshape(gamma_pnew[:, j, :], N_l, N_ex), TT)
+            value_payold[:, :, j]  .= matmul(reshape(gamma_p[:, j, :], N_l, N_ex), TT)
+            value_cknew[:, :, j]   .= matmul(reshape(gamma_cknew[:, j, :], N_l, N_ex), TT)
+            value_ckold[:, :, j]   .= matmul(reshape(gamma_ck[:, j, :], N_l, N_ex), TT)
+        end
+
+        # Loop for updating qeq_new
+        for l in 1:N_l
+            for j in 1:N_b
+                for k in 1:N_ex
+                    qeq_new[l, k, j] = q_new[bprime_old[l, j, k], lamprime_old[l, j, k], l, price_index[1, k]]
+                end
+            end
+        end
+
+        # Calculate max differences
+        maxdiff_pay = maximum(abs(log.(value_paynew ./ value_payold)))
+        maxdiff_def = maximum(abs(log.(matmul(gamma_a, TT) ./ matmul(gamma_anew, TT))))
+        maxdiff_ck  = maximum(abs(log.(value_cknew ./ value_ckold)))
+        maxdiff_q   = maximum(abs(qeq_old - qeq_new) .^ 2)
+
+        # measure time for the iteration
+        finish = time() - start
+
+        # Print results
+        println("Iteration                ", iter)
+        println("Norm, Value of repaying  ", maxdiff_pay)
+        println("Norm, Value of defaulting", maxdiff_def)
+        println("Norm, Value of ck        ", maxdiff_ck)
+        println("Norm, bond prices        ", maxdiff_q)
+        println("Time for iteration       ", finish)
+
+        # Update start time for the next iteration
+        start = time()
+    end
+
+    # Update variables for next iteration
+    q_old = weight_q * q_old + (1 - weight_q) * q_new
+    qeq_old = qeq_new
+    bprime_old = bprime
+    lamprime_old = lamprime
+    debt_choice_old = debt_choice
+    maturity_choice_old = maturity_choice
+    gamma_p = convergence_v * gamma_p + (1 - convergence_v) * gamma_pnew
+    gamma_ck = convergence_v * gamma_ck + (1 - convergence_v) * gamma_cknew
+    gamma_a = convergence_v * gamma_a + (1 - convergence_v) * gamma_anew
+    iter += 1  # Increment the iteration counter
+
+    # Convergence check
+    if (iter > 2 && 
+        maxdiff_def <= tolerance && 
+        maxdiff_pay <= tolerance && 
+        maxdiff_ck <= tolerance && 
+        maxdiff_q <= tolerance)
+
+        aa = 1  # Convergence achieved, exit loop
+    end
+end
+
+
+
 
 

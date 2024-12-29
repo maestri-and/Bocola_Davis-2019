@@ -436,33 +436,33 @@ function locator(coll_points, coll_price, bounds, ss,
     dd = 0.0f0
 
     # Allocate arrays
-    N_sl, N_su = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
-    index_s = zeros(Int, size(coll_points)...)
+    # N_sl, N_su = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
+    # index_s = zeros(Int, size(coll_points)...)
     
     # New variables
-    index_ex1, index_ex2, index_ck = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
-    s_prime = zeros(Float32, size(coll_points)...)
+    # index_ex1, index_ex2, index_ck = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
+    # s_prime = zeros(Float32, size(coll_points)...)
     
     # points_qy, points_qchi, points_qpi, points_y, points_chi, points_pi = zeros(Float32, size(coll_points)...), 
     # zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...)
     
     # coll_transformed = zeros(Float32, size(coll_points)...)
     # coll_transformed1 = zeros(Float32, size(coll_price)...)
-    ones_Np = ones(Float32, size(coll_price, 2))
-    ones_Nc = ones(Float32, size(coll_price, 2))
+    ones_Np = ones(Float32, N_price)
+    ones_Nc = ones(Float32, N_ex)
     
-    y_p = zeros(Float32, size(coll_price)...)
-    chi_p = zeros(Float32, size(coll_price)...)
-    pi_p = zeros(Float32, size(coll_price)...)
+    # y_p = zeros(Float32, size(coll_price)...)
+    # chi_p = zeros(Float32, size(coll_price)...)
+    # pi_p = zeros(Float32, size(coll_price)...)
     
-    weightsq = zeros(Float32, size(coll_points)...)
-    pointsq = zeros(Float32, size(coll_points)...)
+    # weightsq = zeros(Float32, size(coll_points)...)
+    # pointsq = zeros(Float32, size(coll_points)...)
     
     x_prime = zeros(Float32, size(coll_points)...)
     y_prime = zeros(Float32, size(coll_points)...)
     
-    extra = zeros(Float32, size(coll_points, 1))
-    extra2 = zeros(Float32, size(coll_points, 1))
+    # extra = zeros(Float32, size(coll_points, 1))
+    # extra2 = zeros(Float32, size(coll_points, 1))
 
     # Allocate arrays
     # TO BE DELETED
@@ -478,25 +478,43 @@ function locator(coll_points, coll_price, bounds, ss,
     # extra2[2, 1] .= bounds[2, 2] - bounds[2, 1]
     # extra2[3, 1] .= bounds[3, 2] - bounds[3, 1]
 
-    coll_transformed .= (2 * (coll_points) .- extra * ones_Nc) ./ (extra2 * ones_Nc)
-    coll_transformed1 .= (2 * (coll_price) .- extra * ones_Np) ./ (extra2 * ones_Np)
+    coll_transformed = (2 * (coll_points) .- extra * ones_Nc') ./ (extra2 * ones_Nc')
+    coll_transformed1 = (2 * (coll_price) .- extra * ones_Np') ./ (extra2 * ones_Np')
 
     # Handle debt indexing
     for i in 1:N_b
         for j in 1:N_l
-            index_ck[i, j, 1] = searchsorted(debt[:, 1], debt[i, 1] * (1 - lam[j, 1]))
-            if index_ck[i, j, 1] == N_b
-                index_ck[i, j, 1] = N_b - 1
+            # Use searchsorted to find the insertion index in the debt array
+            idx = searchsorted(debt[:, 1], debt[i, 1] * (1 - lam[j, 1]))
+    
+            # Extract the first index if it is a range
+            idx = first(idx)
+
+            # If the index is out of bounds, adjust it to N_b
+            if idx == N_b + 1
+                idx = N_b
             end
+    
+            # Store the result back in index_ck
+            index_ck[i, j, 1] = idx
         end
     end
 
     # Handle index for state variables
     for i in 1:N_s
-        index_s[i, 1] = searchsorted(debt[:, 1], Bline[i, 1])
-        if index_s[i, 1] == N_b
-            index_s[i, 1] = N_b - 1
+        # Find the index using searchsorted
+        idx = searchsorted(debt[:, 1], Bline[i, 1])
+        
+        # Extract the first element of the index range, if necessary
+        idx = first(idx)
+        
+        # Adjust the index if it is out of bounds
+        if idx == N_b + 1
+            idx = N_b
         end
+        
+        # Store the result back in index_s
+        index_s[i, 1] = idx
     end
 
     # Generate pricing schedule
@@ -508,7 +526,7 @@ function locator(coll_points, coll_price, bounds, ss,
             x_prime[2, 1] = mu_chi + rho_chi * chi_p[1, j] + 2 ^ 0.5 * sigma_chi * pointsq[2, k]
             x_prime[3, 1] = exp(pi_star + 2 ^ 0.5 * sigma_pi * pointsq[3, k]) / (1 + exp(pi_star + 2 ^ 0.5 * sigma_pi * pointsq[3, k]))
 
-            y_prime .= (2 * (x_prime .- ss) .- extra) ./ extra2
+            y_prime = (2 * (x_prime .- ss) .- extra) ./ extra2
             y_prime = max.(y_prime, -1.0f0)
             y_prime = min.(y_prime, 1.0f0)
 
@@ -517,13 +535,13 @@ function locator(coll_points, coll_price, bounds, ss,
             s_prime[3, j, k] = min(max(x_prime[3, 1] .- ss[3, 1], points_qpi[1, 1]), points_qpi[N_ppi, 1])
 
             # Bisecting for state variables
-            index_ex2[1, j, k] = searchsorted(points_qy[:, 1], s_prime[1, j, k])
-            index_ex2[2, j, k] = searchsorted(points_qchi[:, 1], s_prime[2, j, k])
-            index_ex2[3, j, k] = searchsorted(points_qpi[:, 1], s_prime[3, j, k])
+            index_ex2[1, j, k] = first(searchsorted(points_qy[:, 1], s_prime[1, j, k]))
+            index_ex2[2, j, k] = first(searchsorted(points_qchi[:, 1], s_prime[2, j, k]))
+            index_ex2[3, j, k] = first(searchsorted(points_qpi[:, 1], s_prime[3, j, k]))
 
-            index_ex1[1, j, k] = searchsorted(points_y[:, 1], s_prime[1, j, k])
-            index_ex1[2, j, k] = searchsorted(points_chi[:, 1], s_prime[2, j, k])
-            index_ex1[3, j, k] = searchsorted(points_pi[:, 1], s_prime[3, j, k])
+            index_ex1[1, j, k] = first(searchsorted(points_y[:, 1], s_prime[1, j, k]))
+            index_ex1[2, j, k] = first(searchsorted(points_chi[:, 1], s_prime[2, j, k]))
+            index_ex1[3, j, k] = first(searchsorted(points_pi[:, 1], s_prime[3, j, k]))
         end
     end
 
