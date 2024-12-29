@@ -12,7 +12,7 @@
 ###############################################################################
 
 using LinearAlgebra
-using IterTools
+# using IterTools - TO BE DELETED
 
 include("auxiliary_functions.jl")
 
@@ -90,8 +90,11 @@ N_pchi      = 5;            # Number of points for chi in pricing schedule
 N_ppi       = 5;            # Number of points for pi in pricing schedule
 N_price     = N_py*N_pchi*N_ppi;# Number of grid points for pricing schedule 
 
-N_p       = 3^state_ex;            # Number of points in Gauss-Hermite quadrature
-N_pq      = 5^state_ex;            # Number of points in second Gauss-Hermite quadrature for price
+N_p         = 3^state_ex;   # Number of points in Gauss-Hermite quadrature
+N_pq        = 5^state_ex;   # Number of points in second Gauss-Hermite quadrature for price
+
+N_ghq       = 3;            # Number of points in Gauss-Hermite quadrature
+N_ghq1      = 5;            # Number of points in second Gauss-Hermite quadrature for price
 
 max_iter    = 550;          # Maximum number of iterations
 
@@ -117,46 +120,46 @@ tolerance     = 10^(-4);
 # kk = 0
 # o = 0
 # p = 0
-index_b = zeros(Int, 1)
-maxb = zeros(Int, 1)
-maxl = zeros(Int, 1)
-index_ss = zeros(Int, 2)
-maxg = zeros(Int, 1)
+# index_b = zeros(Int, 1)
+# maxb = zeros(Int, 1)
+# maxl = zeros(Int, 1)
+# index_ss = zeros(Int, 2)
+# maxg = zeros(Int, 1)
 
 # Model Variables
 price_index = zeros(Int, 1, N_ex)
-ss = zeros(Float32, state_ex, 1)
+# ss = zeros(Float32, state_ex, 1)
 # bounds = zeros(Float32, state_ex, 2)
-gamma_a = zeros(Float32, 1, N_ex)
-gamma_anew = zeros(Float32, 1, N_ex)
-d = zeros(Float32, N_ex)
-gamma_prov = zeros(Float32, 1, N_ex)
-gamma_p = zeros(Float32, N_l, N_b, N_ex)
-gamma_ck = zeros(Float32, N_l, N_b, N_ex)
-gamma_pnew = zeros(Float32, N_l, N_b, N_ex)
-gamma_cknew = zeros(Float32, N_l, N_b, N_ex)
-lamprime = zeros(Int, N_l, N_b, N_ex)
-lamprime_old = zeros(Int, N_l, N_b, N_ex)
-bprime = zeros(Int, N_l, N_b, N_ex)
-bprime_old = zeros(Int, N_l, N_b, N_ex)
-debt_choice = zeros(Float32, N_l, N_b, N_ex)
-debt_choice_old = zeros(Float32, N_l, N_b, N_ex)
-maturity_choice = zeros(Float32, N_l, N_b, N_ex)
-maturity_choice_old = zeros(Float32, N_l, N_b, N_ex)
-value_paynew = zeros(Float32, N_l, N_ex, N_b)
-value_payold = zeros(Float32, N_l, N_ex, N_b)
-value_cknew = zeros(Float32, N_l, N_ex, N_b)
-value_ckold = zeros(Float32, N_l, N_ex, N_b)
-qeq_old = zeros(Float32, N_l, N_ex, N_b)
-qeq_new = zeros(Float32, N_l, N_ex, N_b)
-TT = zeros(Float32, N_ex, N_ex)
-InvTT = zeros(Float32, N_ex, N_ex)
-Bline = zeros(Float32, N_s, 1)
-debt = zeros(Float32, N_b, 1)
-lam = zeros(Float32, N_l, 1)
-coll_points = zeros(Float32, state_ex, N_ex)
+# gamma_a = zeros(Float32, 1, N_ex)
+# gamma_anew = zeros(Float32, 1, N_ex)
+# d = zeros(Float32, N_ex)
+# gamma_prov = zeros(Float32, 1, N_ex)
+# gamma_p = zeros(Float32, N_l, N_b, N_ex)
+# gamma_ck = zeros(Float32, N_l, N_b, N_ex)
+# gamma_pnew = zeros(Float32, N_l, N_b, N_ex)
+# gamma_cknew = zeros(Float32, N_l, N_b, N_ex)
+# lamprime = zeros(Int, N_l, N_b, N_ex)
+# lamprime_old = zeros(Int, N_l, N_b, N_ex)
+# bprime = zeros(Int, N_l, N_b, N_ex)
+# bprime_old = zeros(Int, N_l, N_b, N_ex)
+# debt_choice = zeros(Float32, N_l, N_b, N_ex)
+# debt_choice_old = zeros(Float32, N_l, N_b, N_ex)
+# maturity_choice = zeros(Float32, N_l, N_b, N_ex)
+# maturity_choice_old = zeros(Float32, N_l, N_b, N_ex)
+# value_paynew = zeros(Float32, N_l, N_ex, N_b)
+# value_payold = zeros(Float32, N_l, N_ex, N_b)
+# value_cknew = zeros(Float32, N_l, N_ex, N_b)
+# value_ckold = zeros(Float32, N_l, N_ex, N_b)
+# qeq_old = zeros(Float32, N_l, N_ex, N_b)
+# qeq_new = zeros(Float32, N_l, N_ex, N_b)
+# TT = zeros(Float32, N_ex, N_ex)
+# InvTT = zeros(Float32, N_ex, N_ex)
+# Bline = zeros(Float32, N_s, 1)
+# debt = zeros(Float32, N_b, 1)
+# lam = zeros(Float32, N_l, 1)
+# coll_points = zeros(Float32, state_ex, N_ex)
 coll_price = zeros(Float32, state_ex, N_price)
-weights = zeros(Float32, 1, N_p)
+# weights = zeros(Float32, 1, N_p)
 weightsq = zeros(Float32, 1, N_pq)
 points = zeros(Float32, state_ex, N_p)
 pointsq = zeros(Float32, state_ex, N_pq)
@@ -167,8 +170,8 @@ q_old = zeros(Float32, N_s, N_l, N_l, N_price)
 y_y = zeros(Float32, N_ex)
 chi_y = zeros(Float32, N_ex)
 pi_y = zeros(Float32, N_ex)
-x_prime = zeros(Float32, state_ex, 1)
-y_prime = zeros(Float32, state_ex, 1)
+# x_prime = zeros(Float32, state_ex, 1)
+# y_prime = zeros(Float32, state_ex, 1)
 extra = zeros(Float32, state_ex, 1)
 extra2 = zeros(Float32, state_ex, 1)
 y_prime_TP = zeros(Float32, 1, state_ex)

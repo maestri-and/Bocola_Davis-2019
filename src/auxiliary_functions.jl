@@ -10,6 +10,9 @@
 #              1. Importing libraries and pre-allocated parameters
 #------------------------------------------------------------------------------
 
+using LinearAlgebra
+using Interpolations
+using LoopVectorization
 
 ###############################################################################
 
@@ -71,51 +74,9 @@ end
 
 # For the functions in 3:
 # 
-# - Matrix Inversion: Use `inv(A)` from the `LinearAlgebra` package.
 # - Binary Search: Use `searchsorted(xa, x)` from the Julia standard library.
 # - Recurrence Relations and Matrix Operations: Use Julia's built-in matrix and array operations
 #   (e.g., `*`, `.*`, and `transpose`) for efficient computation.
-
-###############################################################################
-
-# ###############################################################################
-
-# #------------------------------------------------------------------------------
-# #                               3a.  GAUSS MATRIX INVERSION 
-# #------------------------------------------------------------------------------
-
-# ###############################################################################
-
-
-
-
-
-# function gauss!(a::Matrix{Float32}, n::Int)
-#     # Invert matrix by Gauss method
-#     b = copy(a)  # Make a copy of the input matrix
-#     ipvt = 1:n   # Create a vector of pivot indices
-#     for k in 1:n
-#         # Find the pivot element (index of max absolute value in column k)
-#         imax = argmax(abs(b[k:n, k]))[1] + k - 1
-#         m = imax
-#         if m != k
-#             # Swap rows k and m
-#             ipvt[k], ipvt[m] = ipvt[m], ipvt[k]
-#             b[[k, m], :] .= b[[m, k], :]
-#         end
-#         d = 1 / b[k, k]
-#         temp = b[:, k]
-#         for j in 1:n
-#             c = b[k, j] * d
-#             b[:, j] .-= temp * c
-#             b[k, j] = c
-#         end
-#         b[:, k] .= temp * -d
-#         b[k, k] = d
-#     end
-#     a[:, ipvt] .= b
-# end
-
 
 
 # ###############################################################################
@@ -126,39 +87,35 @@ end
 
 # ###############################################################################
 
+####### VECTORISED VERSION
 
+function Tgen!(T_final, X, N, state_ex, N_ex)
+    # Initialize T and T_prod_trans
+    T = ones(1, N, state_ex)  # Allocate T within the function
+    T_prod_trans = ones(1, N_ex)
 
-# function Tgen!(T_final::Matrix{Float32}, X::Vector{Float32}, N::Int, state_ex::Int, N_ex::Int)
-#     # Generate T matrix
-#     T = ones(Float32, 1, N, state_ex)  # Initialize T as a 3D matrix of size (1, N, state_ex)
-#     T_prod_trans = ones(Float32, 1, N_ex)  # Initialize the T_prod_trans vector
+    # Populate T based on X
+    for i in 1:state_ex
+        T[1, 2, i] = X[1, i]
+    end
 
-#     # Step 1: Populate T with values based on X
-#     for i in 1:state_ex
-#         T[1, 2, i] = X[i]
-#     end
+    for i in 3:N
+        for l in 1:state_ex
+            T[1, i, l] = 2 * X[1, l] * T[1, i - 1, l] - T[1, i - 2, l]
+        end
+    end
 
-#     # Step 2: Generate the recurrence relation for T
-#     for i in 3:N
-#         for l in 1:state_ex
-#             T[1, i, l] = 2 * X[l] * T[1, i-1, l] - T[1, i-2, l]
-#         end
-#     end
+    # Compute T_prod_trans
+    k = 0
+    for i in 1:N, l in 1:N, ii in 1:N
+        k += 1
+        T_prod_trans[1, k] = T[1, i, 1] * T[1, l, 2] * T[1, ii, 3]
+    end
 
-#     # Step 3: Compute T_prod_trans based on T
-#     k = 0
-#     for i in 1:N
-#         for l in 1:N
-#             for ii in 1:N
-#                 k += 1
-#                 T_prod_trans[1, k] = T[1, i, 1] * T[1, l, 2] * T[1, ii, 3]
-#             end
-#         end
-#     end
+    # Transpose the result into T_final
+    T_final .= transpose(T_prod_trans)
+end
 
-#     # Final transpose to get the result
-#     T_final .= transpose(T_prod_trans)
-# end
 
 
 # ###############################################################################
@@ -196,3 +153,219 @@ end
 #     end
 #     return i
 # end
+
+
+
+
+
+
+###############################################################################
+
+################################## IMPORTANT !!! ##############################
+
+# For the functions in 5:
+# 
+# - They can be redone using Interpolations.jl - SEE NEXT
+
+###############################################################################
+
+# ###############################################################################
+
+# #------------------------------------------------------------------------------
+# #                               5.  INTERPOLATION - MANUAL
+# #------------------------------------------------------------------------------
+
+# ###############################################################################
+
+
+
+# #------------------------------------------------------------------------------
+# #                               A.  INT_3D
+# #------------------------------------------------------------------------------
+
+
+# function int_3D(x::Vector{Float32}, c::Vector{Float32}, y::Vector{Float32})
+#     # x contains the 6 coordinate values (x0, x1, y0, y1, z0, z1)
+#     # c contains the 8 values at the corners of the cube (c000, c100, c010, ..., c111)
+#     # y is the target point at which to interpolate (y1, y2, y3)
+
+#     xd = (y[1] - x[1]) / (x[2] - x[1])  # interpolation coefficient along x-axis
+#     yd = (y[2] - x[3]) / (x[4] - x[3])  # interpolation coefficient along y-axis
+#     zd = (y[3] - x[5]) / (x[6] - x[5])  # interpolation coefficient along z-axis
+
+#     # Interpolation in the x-direction
+#     c00 = c[1] * (1 - xd) + c[2] * xd
+#     c01 = c[4] * (1 - xd) + c[6] * xd
+#     c10 = c[3] * (1 - xd) + c[5] * xd
+#     c11 = c[7] * (1 - xd) + c[8] * xd
+
+#     # Interpolation in the y-direction
+#     c0  = c00 * (1 - yd) + c10 * yd
+#     c1  = c01 * (1 - yd) + c11 * yd
+
+#     # Final interpolation in the z-direction
+#     return c0 * (1 - zd) + c1 * zd
+# end
+
+# # #------------------------------------------------------------------------------
+# # #                               B.  INTERP_B
+# # #------------------------------------------------------------------------------
+
+# function interp_b(points_y, points_chi, points_pi, index_ex1, collapse_ex, Bline, bprime, s_prime, j, k, i, o)
+#     # Initialize the coordinates for the 6 surrounding points (x0, x1, y0, y1, z0, z1)
+#     x = Float32[
+#         points_y[index_ex1[1, j, k], 1], points_y[index_ex1[1, j, k] + 1, 1],
+#         points_chi[index_ex1[2, j, k], 1], points_chi[index_ex1[2, j, k] + 1, 1],
+#         points_pi[index_ex1[3, j, k], 1], points_pi[index_ex1[3, j, k] + 1, 1]
+#     ]
+
+#     # Initialize the 8 function values at the corners of the cube
+#     c = Float32[
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k], index_ex1[3, j, k]]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k], index_ex1[3, j, k]]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k] + 1, index_ex1[3, j, k]]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k], index_ex1[3, j, k] + 1]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k] + 1, index_ex1[3, j, k]]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k], index_ex1[3, j, k] + 1]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k] + 1, index_ex1[3, j, k] + 1]], 1],
+#         Bline[bprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k] + 1, index_ex1[3, j, k] + 1]], 1]
+#     ]
+
+#     # Perform the trilinear interpolation
+#     return int_3D(x, c, s_prime[:, j, k])
+# end
+
+# # #------------------------------------------------------------------------------
+# # #                               C.  INTERP_LAM
+# # #------------------------------------------------------------------------------
+
+
+# function interp_lam(points_y, points_chi, points_pi, index_ex1, collapse_ex, lam, lamprime, s_prime, j, k, i, o)
+#     # Initialize the coordinates for the 6 surrounding points (x0, x1, y0, y1, z0, z1)
+#     x = Float32[
+#         points_y[index_ex1[1, j, k], 1], points_y[index_ex1[1, j, k] + 1, 1],
+#         points_chi[index_ex1[2, j, k], 1], points_chi[index_ex1[2, j, k] + 1, 1],
+#         points_pi[index_ex1[3, j, k], 1], points_pi[index_ex1[3, j, k] + 1, 1]
+#     ]
+
+#     # Initialize the 8 function values at the corners of the cube
+#     c = Float32[
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k], index_ex1[3, j, k]]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k], index_ex1[3, j, k]]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k] + 1, index_ex1[3, j, k]]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k], index_ex1[3, j, k] + 1]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k] + 1, index_ex1[3, j, k]]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k], index_ex1[3, j, k] + 1]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k] + 1, index_ex1[3, j, k] + 1]], 1],
+#         lam[lamprime[o, i, collapse_ex[index_ex1[1, j, k] + 1, index_ex1[2, j, k] + 1, index_ex1[3, j, k] + 1]], 1]
+#     ]
+
+#     # Perform the trilinear interpolation
+#     return int_3D(x, c, s_prime[:, j, k])
+# end
+
+# # #------------------------------------------------------------------------------
+# # #                               D.  INTERP_Q
+# # #------------------------------------------------------------------------------
+
+# function interp_q(q_old, points_qy, points_qchi, points_qpi, index_ex2, collapse, index_bb, index_ll, s_prime, j, k, o)
+#     # Initialize the coordinates for the 6 surrounding points (x0, x1, y0, y1, z0, z1)
+#     x = Float32[
+#         points_qy[index_ex2[1, j, k], 1], points_qy[index_ex2[1, j, k] + 1, 1],
+#         points_qchi[index_ex2[2, j, k], 1], points_qchi[index_ex2[2, j, k] + 1, 1],
+#         points_qpi[index_ex2[3, j, k], 1], points_qpi[index_ex2[3, j, k] + 1, 1]
+#     ]
+
+#     # Initialize the 8 function values at the corners of the cube
+#     c = Float32[
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k], index_ex2[2, j, k], index_ex2[3, j, k]]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k] + 1, index_ex2[2, j, k], index_ex2[3, j, k]]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k], index_ex2[2, j, k] + 1, index_ex2[3, j, k]]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k], index_ex2[2, j, k], index_ex2[3, j, k] + 1]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k] + 1, index_ex2[2, j, k] + 1, index_ex2[3, j, k]]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k] + 1, index_ex2[2, j, k], index_ex2[3, j, k] + 1]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k], index_ex2[2, j, k] + 1, index_ex2[3, j, k] + 1]], index_ll[i], 1],
+#         q_old[index_bb[o, collapse[index_ex2[1, j, k] + 1, index_ex2[2, j, k] + 1, index_ex2[3, j, k] + 1]], index_ll[i], 1]
+#     ]
+
+#     # Perform the trilinear interpolation
+#     return int_3D(x, c, s_prime[:, j, k])
+# end
+
+
+# ###############################################################################
+
+# #------------------------------------------------------------------------------
+# #                   5.  INTERPOLATIONS using Interpolations.jl
+# #------------------------------------------------------------------------------
+
+# ###############################################################################
+
+# Helper function to create an Interpolation object
+function create_interpolation(points_y, points_chi, points_pi, data_values)
+    # Assume that points_y, points_chi, points_pi are 1D arrays of grid points
+    # and data_values is a 3D matrix corresponding to the function values on the grid.
+
+    # Create a 3D grid interpolation object using linear interpolation
+    return interpolate(data_values, Gridded(Linear()), (points_y, points_chi, points_pi))
+end
+
+# Function for Bline interpolation
+function interp_b(points_y, points_chi, points_pi, index_ex1, collapse_ex, Bline, bprime, s_prime, j, k, i, o)
+    # Extract 3D grid points and values
+    x = [
+        points_y[index_ex1[1, j, k], 1], points_y[index_ex1[1, j, k] + 1, 1],
+        points_chi[index_ex1[2, j, k], 1], points_chi[index_ex1[2, j, k] + 1, 1],
+        points_pi[index_ex1[3, j, k], 1], points_pi[index_ex1[3, j, k] + 1, 1]
+    ]
+
+    # Collapse the indices and extract the corresponding values
+    collapse_idx = collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k], index_ex1[3, j, k]]
+    bprime_values = bprime[o, i, collapse_idx]
+
+    # Use Interpolations.jl to create the interpolation object
+    interp = create_interpolation(points_y, points_chi, points_pi, Bline)
+
+    # Perform the interpolation using the created object
+    return interpolate(interp, x...)
+end
+
+# Function for Lam interpolation
+function interp_lam(points_y, points_chi, points_pi, index_ex1, collapse_ex, lam, lamprime, s_prime, j, k, i, o)
+    # Extract 3D grid points and values
+    x = [
+        points_y[index_ex1[1, j, k], 1], points_y[index_ex1[1, j, k] + 1, 1],
+        points_chi[index_ex1[2, j, k], 1], points_chi[index_ex1[2, j, k] + 1, 1],
+        points_pi[index_ex1[3, j, k], 1], points_pi[index_ex1[3, j, k] + 1, 1]
+    ]
+
+    # Collapse the indices and extract the corresponding values
+    collapse_idx = collapse_ex[index_ex1[1, j, k], index_ex1[2, j, k], index_ex1[3, j, k]]
+    lamprime_values = lamprime[o, i, collapse_idx]
+
+    # Use Interpolations.jl to create the interpolation object
+    interp = create_interpolation(points_y, points_chi, points_pi, lam)
+
+    # Perform the interpolation using the created object
+    return interpolate(interp, x...)
+end
+
+# Function for Q interpolation
+function interp_q(q_old, points_qy, points_qchi, points_qpi, index_ex2, collapse, index_bb, index_ll, s_prime, j, k, o)
+    # Extract 3D grid points and values
+    x = [
+        points_qy[index_ex2[1, j, k], 1], points_qy[index_ex2[1, j, k] + 1, 1],
+        points_qchi[index_ex2[2, j, k], 1], points_qchi[index_ex2[2, j, k] + 1, 1],
+        points_qpi[index_ex2[3, j, k], 1], points_qpi[index_ex2[3, j, k] + 1, 1]
+    ]
+
+    # Collapse the indices and extract the corresponding values
+    collapse_idx = collapse[index_ex2[1, j, k], index_ex2[2, j, k], index_ex2[3, j, k]]
+    q_old_values = q_old[index_bb[1], index_ll[1], o, collapse_idx]
+
+    # Use Interpolations.jl to create the interpolation object
+    interp = create_interpolation(points_qy, points_qchi, points_qpi, q_old)
+
+    # Perform the interpolation using the created object
+    return interpolate(interp, x...)
+end

@@ -11,11 +11,12 @@
 #------------------------------------------------------------------------------
 
 using LinearAlgebra
-using SharedVector
+# using SharedVector
 using BenchmarkTools
 using Printf
 using Random
 using Base.Iterators: product
+using Base.Threads
 
 include("parameters.jl")
 
@@ -418,13 +419,17 @@ end
 
 
 
-function locator(coll_points, coll_price, bounds, ss, Bline, lam, debt, weightsq, pointsq, index_s, index_ck, index_ex1, index_ex2, N_sl, N_su, s_prime, points_qy, points_qchi, points_qpi, points_y, points_chi, points_pi)
+function locator(coll_points, coll_price, bounds, ss, 
+    Bline, lam, debt, weightsq, pointsq, index_s, 
+    index_ck, index_ex1, index_ex2, N_sl, N_su, s_prime, 
+    points_qy, points_qchi, points_qpi, 
+    points_y, points_chi, points_pi)
     #---------------------------------------------
     # 0. Define variables
     #---------------------------------------------
 
     # Model variables
-    i, j, k = 0, 0, 0
+    # i, j, k = 0, 0, 0
     temp_ex1 = zeros(Int, 1)
     temp_ex2 = zeros(Int, 1)
     index_ss = zeros(Int, 2)
@@ -438,10 +443,11 @@ function locator(coll_points, coll_price, bounds, ss, Bline, lam, debt, weightsq
     index_ex1, index_ex2, index_ck = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
     s_prime = zeros(Float32, size(coll_points)...)
     
-    points_qy, points_qchi, points_qpi, points_y, points_chi, points_pi = zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...)
+    # points_qy, points_qchi, points_qpi, points_y, points_chi, points_pi = zeros(Float32, size(coll_points)...), 
+    # zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...)
     
-    coll_transformed = zeros(Float32, size(coll_points)...)
-    coll_transformed1 = zeros(Float32, size(coll_price)...)
+    # coll_transformed = zeros(Float32, size(coll_points)...)
+    # coll_transformed1 = zeros(Float32, size(coll_price)...)
     ones_Np = ones(Float32, size(coll_price, 2))
     ones_Nc = ones(Float32, size(coll_price, 2))
     
@@ -458,57 +464,19 @@ function locator(coll_points, coll_price, bounds, ss, Bline, lam, debt, weightsq
     extra = zeros(Float32, size(coll_points, 1))
     extra2 = zeros(Float32, size(coll_points, 1))
 
-    # Read parameters from file (similar to Fortran open/read)
-    param_c = readdlm("Textfiles/parameters_comp.txt", ',')
-    param_s = readdlm("Textfiles/parameters_str.txt", ',')
-    
-    state_ex = Int(param_c[1, 1])
-    N = Int(param_c[2, 1])
-    N_ex = Int(param_c[3, 1])
-    N_b = Int(param_c[4, 1])
-    b_min = param_c[5, 1]
-    b_max = param_c[6, 1]
-    N_l = Int(param_c[7, 1])
-    lam_min = param_c[8, 1]
-    lam_max = param_c[9, 1]
-    N_s = Int(param_c[10, 1])
-    N_b1 = Int(param_c[11, 1])
-    N_b3 = Int(param_c[12, 1])
-    b1_min = param_c[13, 1]
-    b1_max = param_c[14, 1]
-    b2_min = param_c[15, 1]
-    b2_max = param_c[16, 1]
-    b3_min = param_c[17, 1]
-    b3_max = param_c[18, 1]
-    N_bb = Int(param_c[19, 1])
-    N_py = Int(param_c[20, 1])
-    N_pchi = Int(param_c[21, 1])
-    N_ppi = Int(param_c[22, 1])
-    N_price = Int(param_c[23, 1])
-    N_p = Int(param_c[24, 1]) ^ state_ex
-    N_pq = Int(param_c[25, 1]) ^ state_ex
-    max_iter = Int(param_c[26, 1])
-    convergence_q = param_c[27, 1]
-    convergence_v = param_c[28, 1]
-    lwb = param_c[30, 1]
-    uwb = param_c[31, 1]
-    
-    beta, sigma, rho_y, sigma_y, sigma_yk, rho_chi, mu_chi, sigma_chi, pi_star, sigma_pi, phi_0, phi_1, kappa_0, kappa_1, psi, d0, d1, g_star, alpha, d_upper = param_s[:, 1]
-    
     # Allocate arrays
-    ones_Nc .= 1
-    ones_Np .= 1
-    y_p[1, :] .= coll_price[1, :]
-    chi_p[1, :] .= coll_price[2, :] .+ ss[2, 1]
-    pi_p[1, :] .= coll_price[3, :] .+ ss[3, 1]
+    # TO BE DELETED
+    # y_p[1, :] .= coll_price[1, :]
+    # chi_p[1, :] .= coll_price[2, :] .+ ss[2, 1]
+    # pi_p[1, :] .= coll_price[3, :] .+ ss[3, 1]
 
-    extra[1, 1] .= bounds[1, 1] + bounds[1, 2]
-    extra[2, 1] .= bounds[2, 1] + bounds[2, 2]
-    extra[3, 1] .= bounds[3, 1] + bounds[3, 2]
+    # extra[1, 1] = bounds[1, 1] + bounds[1, 2]
+    # extra[2, 1] = bounds[2, 1] + bounds[2, 2]
+    # extra[3, 1] = bounds[3, 1] + bounds[3, 2]
     
-    extra2[1, 1] .= bounds[1, 2] - bounds[1, 1]
-    extra2[2, 1] .= bounds[2, 2] - bounds[2, 1]
-    extra2[3, 1] .= bounds[3, 2] - bounds[3, 1]
+    # extra2[1, 1] .= bounds[1, 2] - bounds[1, 1]
+    # extra2[2, 1] .= bounds[2, 2] - bounds[2, 1]
+    # extra2[3, 1] .= bounds[3, 2] - bounds[3, 1]
 
     coll_transformed .= (2 * (coll_points) .- extra * ones_Nc) ./ (extra2 * ones_Nc)
     coll_transformed1 .= (2 * (coll_price) .- extra * ones_Np) ./ (extra2 * ones_Np)
