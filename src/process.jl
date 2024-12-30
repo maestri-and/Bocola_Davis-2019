@@ -141,7 +141,7 @@ function update_values!(gamma_pnew, gamma_anew, gamma_cknew, bprime, lamprime, d
             end
         end
     end
-    #RAN TILL HERE --- TO BE DELETED 
+    
     @threads for l in 1:N_l
         for k in 1:N_b
             gam_prov = zeros(N_ex)  # Allocating gam_prov
@@ -522,8 +522,8 @@ function locator(coll_points, coll_price, bounds, ss,
         x_prime .= 0  # Clear x_prime before filling it
         y_prime .= 0  # Clear y_prime before filling it
         for k in 1:N_pq
-            x_prime[1, 1] = rho_y * y_p[1, j] + 2 ^ 0.5 * sigma_y * pointsq[1, k] + 2 ^ 0.5 * sigma_yk * pointsq[2, k]
-            x_prime[2, 1] = mu_chi + rho_chi * chi_p[1, j] + 2 ^ 0.5 * sigma_chi * pointsq[2, k]
+            x_prime[1, 1] = rho_y * y_p[j] + 2 ^ 0.5 * sigma_y * pointsq[1, k] + 2 ^ 0.5 * sigma_yk * pointsq[2, k]
+            x_prime[2, 1] = mu_chi + rho_chi * chi_p[j] + 2 ^ 0.5 * sigma_chi * pointsq[2, k]
             x_prime[3, 1] = exp(pi_star + 2 ^ 0.5 * sigma_pi * pointsq[3, k]) / (1 + exp(pi_star + 2 ^ 0.5 * sigma_pi * pointsq[3, k]))
 
             y_prime = (2 * (x_prime .- ss) .- extra) ./ extra2
