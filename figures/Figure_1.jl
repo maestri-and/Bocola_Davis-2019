@@ -26,7 +26,7 @@ println("Sheetnames: ", XLSX.sheetnames(xf))
 # Import the relevant sheet into a data frame
 sh1 = xf["GDP"] 
 @show sh1["A1:B2"]
-df = DataFrame(XLSX.readtable("/Users/alibenra/Desktop/Julia Files/Datanew.xlsx", "GDP"))
+df = DataFrame(XLSX.readtable("Data.xlsx", "GDP"))
 CSV.write("output.csv", df)
 
 # Extract the year and quarter from the Date column (e.g., "Q1-2000")
@@ -57,7 +57,7 @@ savefig("panel_a_output.png")
                               #Panel B
 #############################################################################
 # Import the relevant sheet into a data frame
-df2 = DataFrame(XLSX.readtable("/Users/alibenra/Desktop/Julia Files/Datanew.xlsx", "Main Series"))
+df2 = DataFrame(XLSX.readtable("Data.xlsx", "Main Series"))
 CSV.write("debt2output.csv", df2)
 # Extract the year and quarter from the Date column (e.g., "Q1-2000")
 split_dates2 = split.(df2.Date, "Q")  # Split the Date string by "-"
@@ -73,7 +73,7 @@ rename!(df2, "Debt maturity" => :Debt_maturity)
 
 # Computing new issuances
 # Step 1: Read the "Redemption profile Italian debt" sheet into a DataFrame
-df_redemption = DataFrame(XLSX.readtable("/Users/alibenra/Desktop/Julia Files/Datanew.xlsx", "Redemption profile Italian debt"))
+df_redemption = DataFrame(XLSX.readtable("Data.xlsx", "Redemption profile Italian debt"))
 # Convert the redemption profile into a matrix and exclude the Date column
 S = Matrix(df_redemption[:, 2:end])  # Redemption profile matrix (debt redemptions)
 
