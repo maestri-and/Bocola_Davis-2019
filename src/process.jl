@@ -437,49 +437,12 @@ function locator(coll_points, coll_price, bounds, ss,
     index_ss = zeros(Int, 2)
     dd = 0.0f0
 
-    # Allocate arrays
-    # N_sl, N_su = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
-    # index_s = zeros(Int, size(coll_points)...)
-    
-    # New variables
-    # index_ex1, index_ex2, index_ck = zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...), zeros(Int, size(coll_points)...)
-    # s_prime = zeros(Float32, size(coll_points)...)
-    
-    # points_qy, points_qchi, points_qpi, points_y, points_chi, points_pi = zeros(Float32, size(coll_points)...), 
-    # zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...), zeros(Float32, size(coll_points)...)
-    
-    # coll_transformed = zeros(Float32, size(coll_points)...)
-    # coll_transformed1 = zeros(Float32, size(coll_price)...)
     ones_Np = ones(Float32, N_price)
     ones_Nc = ones(Float32, N_ex)
     
-    # y_p = zeros(Float32, size(coll_price)...)
-    # chi_p = zeros(Float32, size(coll_price)...)
-    # pi_p = zeros(Float32, size(coll_price)...)
-    
-    # weightsq = zeros(Float32, size(coll_points)...)
-    # pointsq = zeros(Float32, size(coll_points)...)
-    
     x_prime = zeros(Float32, size(coll_points)...)
     y_prime = zeros(Float32, size(coll_points)...)
-    
-    # extra = zeros(Float32, size(coll_points, 1))
-    # extra2 = zeros(Float32, size(coll_points, 1))
-
-    # Allocate arrays
-    # TO BE DELETED
-    # y_p[1, :] .= coll_price[1, :]
-    # chi_p[1, :] .= coll_price[2, :] .+ ss[2, 1]
-    # pi_p[1, :] .= coll_price[3, :] .+ ss[3, 1]
-
-    # extra[1, 1] = bounds[1, 1] + bounds[1, 2]
-    # extra[2, 1] = bounds[2, 1] + bounds[2, 2]
-    # extra[3, 1] = bounds[3, 1] + bounds[3, 2]
-    
-    # extra2[1, 1] .= bounds[1, 2] - bounds[1, 1]
-    # extra2[2, 1] .= bounds[2, 2] - bounds[2, 1]
-    # extra2[3, 1] .= bounds[3, 2] - bounds[3, 1]
-
+   
     coll_transformed = (2 * (coll_points) .- extra * ones_Nc') ./ (extra2 * ones_Nc')
     coll_transformed1 = (2 * (coll_price) .- extra * ones_Np') ./ (extra2 * ones_Np')
 
@@ -495,6 +458,10 @@ function locator(coll_points, coll_price, bounds, ss,
             # If the index is out of bounds, adjust it to N_b
             if idx == N_b + 1
                 idx = N_b
+            end
+
+            if idx == N_b 
+                idx = N_b - 1
             end
     
             # Store the result back in index_ck
@@ -513,6 +480,10 @@ function locator(coll_points, coll_price, bounds, ss,
         # Adjust the index if it is out of bounds
         if idx == N_b + 1
             idx = N_b
+        end
+
+        if idx == N_b 
+            idx = N_b - 1
         end
         
         # Store the result back in index_s
