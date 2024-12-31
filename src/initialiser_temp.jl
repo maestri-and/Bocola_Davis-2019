@@ -270,104 +270,142 @@ gamma_anew = zeros(Float32, N_ex)
 debt_choice = zeros(Float32, N_l, N_b, N_ex)
 maturity_choice = zeros(Float32, N_l, N_b, N_ex) 
 
-while (aa==0 && iter<max_iter)
 
-    update_values!(gamma_pnew, gamma_anew, gamma_cknew, 
-    bprime, lamprime, debt_choice, maturity_choice, 
-    q_old, gamma_p, gamma_a, gamma_ck, coll_points, 
-    InvTT, bounds, ss, coll_price, price_index, 
-    Bline, debt, lam, weights, points, TTT1, 
-    index_s, index_ck, N_sl, N_su)
+# Temporary arrays
+value_aut = zeros(Float32, N_ex, 1)
+gam_bound = zeros(Float32, N_ex)
+value_pay = zeros(Float32, N_ex, N_l, N_b, N_bb, N_l)
+value_ck = zeros(Float32, N_l, N_b, N_ex)
+maxv = zeros(Float32, N_l, N_b, N_ex)
+maxv1 = zeros(Float32, N_ex, N_l, N_b, N_bb)
+lamprime1 = zeros(Float32, N_l, N_b, N_ex, N_bb)
 
-    println("Values updated! Iter: $iter")
+# Step 2.2: Generate points for exogenous shocks
+y_y = ss[1,1] .+ coll_points[1, :]
+chi_y = ss[2,1] .+ coll_points[2, :]
+pi_y = ss[3,1] .+ coll_points[3, :]
 
-    update_price!(q_new, q_old, gamma_p, gamma_a, gamma_ck, 
-    coll_points, coll_price, bounds, ss, price_index, 
-    Bline, lam, debt, weightsq, pointsq, 
-    bprime_old, lamprime_old, TTT2, 
-    index_s, index_ex1, index_ex2, s_prime, 
-    points_qy, points_qchi, points_qpi, 
-    points_y, points_chi, points_pi)
+# Step 2.3: Generate output costs of default
+d_0 = (d0 - d1 * exp(bounds[1, 1])) / (1 - exp(bounds[1, 1]))
+d_1 = d1 - d_0
+d = d_0 .+ d_1 .* exp.(y_y)
 
-    if (iter==start_conv)
-         weight_q = convergence_q 
-    end
+# Step 3: Update value of defaulting
+@threads for i in 1:N_ex
+    # Re-initialize variables for each thread
+    TT_def = zeros(Float32, N_p, 1)
+    TT_nodef = zeros(Float32, N_p, 1)
+    TT_ck = zeros(Float32, N_p, 1)
+    gam_prov = zeros(Float32, 1, N_ex)
+    cont_fund = 0.0
+    cont_fund_u = 0.0
+    spend = 0.0
 
-    if (iter>=start_conv)  
-         weight_q = min( weight_q+(0.001/100),0.9995)
-    end 
-    
-    # Initialize or reset `start` before the loop if needed
-    start = time()
+    # Inner loop over j
+    for j in 1:N_p
+        # Using reshape inside the thread to assign values to gam_prov
+        gam_prov[:] .= reshape(gamma_p[1, 1, :], N_ex)
+        cont_fund = 0.0
+        cont_fund_u = 0.0
 
-    # Loop body 
-    for iter in (1:max_iter) 
-
-        # Update values with matrix multiplication
-        for j in 1:N_b
-            value_paynew[:, :, j]  .= matmul(reshape(gamma_pnew[:, j, :], N_l, N_ex), TT)
-            value_payold[:, :, j]  .= matmul(reshape(gamma_p[:, j, :], N_l, N_ex), TT)
-            value_cknew[:, :, j]   .= matmul(reshape(gamma_cknew[:, j, :], N_l, N_ex), TT)
-            value_ckold[:, :, j]   .= matmul(reshape(gamma_ck[:, j, :], N_l, N_ex), TT)
+        # Loop over k
+        for k in 1:N_ex
+            cont_fund += gam_prov[1,k] * TTT1[i,j,k,1]
+            cont_fund_u += gamma_a[k] * TTT1[i,j,k,1]
         end
 
-        # Loop for updating qeq_new
-        for l in 1:N_l
-            for j in 1:N_b
-                for k in 1:N_ex
-                    qeq_new[l, k, j] = q_new[bprime_old[l, j, k], lamprime_old[l, j, k], l, price_index[1, k]]
+        # Assign results to TT_nodef and TT_def
+        TT_nodef[j, 1] = cont_fund
+        TT_def[j, 1] = cont_fund_u
+    end
+
+    # Calculate final result for the value_aut vector
+    cont_fund = sum(weights .* (psi .* max.(TT_nodef, TT_def) .+ (1 .- psi) .* TT_def))
+    spend = max(exp(y_y[i]) * (1 - d[i]) - g_star, 0.005)
+    value_aut[i, 1] = (spend^(1 - sigma) - 1) / (1 - sigma) + beta * π^(-1.5) * cont_fund
+end
+
+gamma_anew .= InvTT * value_aut
+
+gam_bound .= minimum(value_aut) - 0.75
+
+# Step 4: Update value of repaying if lenders do not rollover - Slow section
+# Vectorized faster version    
+@threads for j in 1:N_ex
+    for m in 1:N_l
+        for i in 1:N_b
+            # Initialize variables
+            TT_def = zeros(Float32, N_p, 1)
+            TT_nodef = zeros(Float32, N_p, 1)
+            TT_ck = zeros(Float32, N_p, 1)
+            safe = zeros(Float32, N_p, 1)
+            safe .= 0.0
+
+            # Vectorized calculation of TT_nodef, TT_ck, and safe
+            for k in 1:N_p
+                idx_ck = index_ck[i, m, 1]
+                TTT1_jk = TTT1[j, k, :, 1]  # Extract slice for easier access
+
+                # Vectorized accumulation of cont_fund_l, cont_fund_u, cont_fund_lck, cont_fund_uck
+                if i > 1
+                    cont_fund_l = sum(gamma_p[m, idx_ck, 1:N_ex] .* TTT1_jk)
+                    cont_fund_u = sum(gamma_p[m, idx_ck + 1, 1:N_ex] .* TTT1_jk)
+                    cont_fund_lck = sum(gamma_ck[m, idx_ck, 1:N_ex] .* TTT1_jk)
+                    cont_fund_uck = sum(gamma_ck[m, idx_ck + 1, 1:N_ex] .* TTT1_jk)
+
+                    # Precompute denominator to optimize calculation
+                    denom = debt[idx_ck + 1, 1] - debt[idx_ck, 1]
+
+                    TT_nodef[k, 1] = cont_fund_l * ((debt[idx_ck + 1, 1] - debt[i, 1] * (1 - lam[m, 1])) / denom) +
+                                    cont_fund_u * ((debt[i, 1] * (1 - lam[m, 1]) - debt[idx_ck, 1]) / denom)
+
+                    TT_ck[k, 1] = cont_fund_lck * ((debt[idx_ck + 1, 1] - debt[i, 1] * (1 - lam[m, 1])) / denom) +
+                                    cont_fund_uck * ((debt[i, 1] * (1 - lam[m, 1]) - debt[idx_ck, 1]) / denom)
                 end
+
+                # Handle the case when i == 1 (no need for loops)
+                if i == 1
+                    cont_fund_u = sum(gamma_p[m, i, 1:N_ex] .* TTT1_jk)
+                    cont_fund_uck = sum(gamma_ck[m, i, 1:N_ex] .* TTT1_jk)
+
+                    TT_nodef[k, 1] = cont_fund_u
+                    TT_ck[k, 1] = cont_fund_uck
+                end
+
+                # Vectorized calculation of TT_def
+                cont_fund = sum(gamma_a .* TTT1_jk)
+                TT_def[k, 1] = cont_fund
+
+                # Vectorized safe calculation (comparison)
+                safe[k, 1] = TT_ck[k, 1] >= TT_def[k, 1] ? 1.0 : 0.0
             end
+
+            # Vectorized calculation for total cont_fund using broadcasting
+            cont_fund = sum(weights .* (safe .* max.(TT_def, TT_nodef) .+ 
+                                        (1 .- safe) .* (pi_y[j] .* TT_def .+ 
+                                        (1 - pi_y[j]) .* max.(TT_def, TT_nodef))))
+
+            # Vectorized spend calculation
+            spend = max(exp(y_y[j]) - debt[i, 1] * lam[m, 1] - g_star, 0.005)
+
+            # Final value calculation
+            value_ck[m, i, j] = (spend^(1 - sigma) - 1) / (1 - sigma) + beta * π^(-1.5) * cont_fund
         end
-
-        # Calculate max differences
-        maxdiff_pay = maximum(abs(log.(value_paynew ./ value_payold)))
-        maxdiff_def = maximum(abs(log.(matmul(gamma_a, TT) ./ matmul(gamma_anew, TT))))
-        maxdiff_ck  = maximum(abs(log.(value_cknew ./ value_ckold)))
-        maxdiff_q   = maximum(abs(qeq_old - qeq_new) .^ 2)
-
-        # measure time for the iteration
-        finish = time() - start
-
-        # Print results
-        println("Iteration                ",  iter)
-        println("Norm, Value of repaying  ", maxdiff_pay)
-        println("Norm, Value of defaulting", maxdiff_def)
-        println("Norm, Value of ck        ", maxdiff_ck)
-        println("Norm, bond prices        ", maxdiff_q)
-        println("Time for iteration       ", finish)
-        println("")
-
-        # Update start time for the next iteration
-        start = time()
-    end
-
-    # Update variables for next iteration
-    q_old .=  weight_q * q_old + (1 -  weight_q) * q_new
-    qeq_old .= qeq_new
-    bprime_old .= bprime
-    lamprime_old .= lamprime
-    debt_choice_old .= debt_choice
-    maturity_choice_old .= maturity_choice
-    gamma_p .= convergence_v * gamma_p + (1 - convergence_v) * gamma_pnew
-    gamma_ck .= convergence_v * gamma_ck + (1 - convergence_v) * gamma_cknew
-    gamma_a .= convergence_v * gamma_a + (1 - convergence_v) * gamma_anew
-    iter += 1  # Increment the iteration counter
-
-    # Convergence check
-    if (iter > 2 && 
-        maxdiff_def <= tolerance && 
-        maxdiff_pay <= tolerance && 
-        maxdiff_ck <= tolerance && 
-        maxdiff_q <= tolerance)
-
-        aa .= 1  # Convergence achieved, exit loop
-        
-        println("CONVERGENCE ACHIEVED!")
     end
 end
 
-
-
-
-
+# Unparallelised
+for l in 1:N_l
+    for k in 1:N_b
+        gam_prov = zeros(N_ex)  # Allocating gam_prov
+        gam_prov .= value_ck[l, k, :]  # Assuming value_ck is pre-defined
+        
+        # Apply max constraint
+        for i in 1:N_ex
+            gam_prov[i] = max(gam_bound[i], gam_prov[i])
+        end
+        
+        gam_prov .=  InvTT * gam_prov
+        gamma_cknew[l, k, :] .= gam_prov  # Store result
+    end
+end

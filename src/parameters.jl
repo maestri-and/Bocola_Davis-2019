@@ -13,6 +13,7 @@
 
 using LinearAlgebra
 # using IterTools - TO BE DELETED
+using Base.Iterators
 
 include("auxiliary_functions.jl")
 
@@ -36,7 +37,8 @@ beta    = 0.980                 # Government discount factor
 #d1      = 0.092                 # Average output losses
 d0     = 0.140625;             # Output Losses in low income states
 d1     = 0.225;                # Average Output Losses
-alp   = 0.400                 # Adjustment cost, maturity, elasticity
+alp   = alpha = 0.400                 # Adjustment cost, maturity, elasticity
+# TO DO -Ensure consistency of alp/alpha naming
 d_upper    = 6.810                 # Adjustment cost, maturity, level
 pi_star  = -6.500                # Mean of pi
 sigma_pi = 1.650                # Volatility of pi
@@ -89,6 +91,7 @@ N_py        = 51;           # Number of points for y in pricing schedule
 N_pchi      = 5;            # Number of points for chi in pricing schedule
 N_ppi       = 5;            # Number of points for pi in pricing schedule
 N_price     = N_py*N_pchi*N_ppi;# Number of grid points for pricing schedule 
+N_ps        = N_py*N_pchi*N_ppi; # TO DO: ensure consistency of N_price/N_ps naming 
 
 N_p         = 3^state_ex;   # Number of points in Gauss-Hermite quadrature
 N_pq        = 5^state_ex;   # Number of points in second Gauss-Hermite quadrature for price
@@ -131,7 +134,6 @@ price_index = zeros(Int, 1, N_ex)
 # ss = zeros(Float32, state_ex, 1)
 # bounds = zeros(Float32, state_ex, 2)
 # gamma_a = zeros(Float32, 1, N_ex)
-# gamma_anew = zeros(Float32, 1, N_ex)
 # d = zeros(Float32, N_ex)
 # gamma_prov = zeros(Float32, 1, N_ex)
 # gamma_p = zeros(Float32, N_l, N_b, N_ex)
@@ -142,9 +144,7 @@ price_index = zeros(Int, 1, N_ex)
 # lamprime_old = zeros(Int, N_l, N_b, N_ex)
 # bprime = zeros(Int, N_l, N_b, N_ex)
 # bprime_old = zeros(Int, N_l, N_b, N_ex)
-# debt_choice = zeros(Float32, N_l, N_b, N_ex)
 # debt_choice_old = zeros(Float32, N_l, N_b, N_ex)
-# maturity_choice = zeros(Float32, N_l, N_b, N_ex)
 # maturity_choice_old = zeros(Float32, N_l, N_b, N_ex)
 # value_paynew = zeros(Float32, N_l, N_ex, N_b)
 # value_payold = zeros(Float32, N_l, N_ex, N_b)
