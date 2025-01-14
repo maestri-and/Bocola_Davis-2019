@@ -97,7 +97,7 @@ function update_values!(gamma_pnew, gamma_anew, gamma_cknew, bprime,
 
     # Step 4: Update value of repaying if lenders do not rollover - Slow section
     # Vectorized faster version    
-    @threads for j in 1:N_ex
+    @elapsed @threads for j in 1:N_ex
         for m in 1:N_l
             for i in 1:N_b
                 # Initialize variables
@@ -218,7 +218,7 @@ function update_values!(gamma_pnew, gamma_anew, gamma_cknew, bprime,
 
         # Use @threads to parallelize the outermost loop
         start_test = time()
-        @time @threads for k in 1:N_b
+        @elapsed @threads for k in 1:2#N_b
             # TO BE DELETED - Checking time
             if k == 1
                 println("Starting test...")
@@ -230,81 +230,81 @@ function update_values!(gamma_pnew, gamma_anew, gamma_cknew, bprime,
                 println("Seconds from start : $toprint")
                 println("Minutes from start : $(toprint/60)")
             end
-            kk = 0
-            for l in N_sl[k, 1]:N_su[k, 1]
-                kk += 1
-                # Initialize safe and other variables inside the loop
-                safe .= 0
-                TT_def .= 0
-                TT_nodef .= 0
-                TT_ck .= 0
-                
-                # Precompute differences that are used in multiple places
-                debt_l_plus_1 = debt[index_s[l, 1] + 1, 1]
-                debt_l = debt[index_s[l, 1], 1]
-                Bline_l = Bline[l]
+            for kk in N_sl[k, 1]:N_su[k, 1]
+                for l in N_sl[k, 1]:N_su[k, 1]
+                    # Initialize safe and other variables inside the loop
+                    safe .= 0
+                    TT_def .= 0
+                    TT_nodef .= 0
+                    TT_ck .= 0
+                    
+                    # Precompute differences that are used in multiple places
+                    debt_l_plus_1 = debt[index_s[l, 1] + 1, 1]
+                    debt_l = debt[index_s[l, 1], 1]
+                    Bline_l = Bline[l]
 
-                debt_diff = debt_l_plus_1 - debt_l
-                debt_sum = debt_l_plus_1 + debt_l
-                debt_l_plus_1_minus_Bline_l = debt_l_plus_1 - Bline_l
-                Bline_l_minus_debt_l = Bline_l - debt_l
+                    debt_diff = debt_l_plus_1 - debt_l
+                    debt_sum = debt_l_plus_1 + debt_l
+                    debt_l_plus_1_minus_Bline_l = debt_l_plus_1 - Bline_l
+                    Bline_l_minus_debt_l = Bline_l - debt_l
 
-                # Contingency variables precomputed for each j
-                for o in 1:N_l
-                    # Reset contingency variables at the start of each o loop
-                    cont_fund_u = 0.0
-                    cont_fund_l = 0.0
-                    cont_fund_uck = 0.0
-                    cont_fund_lck = 0.0
-    
-                    for j in 1:N_p
-                        # Accumulate contingency funds for each m
-                        for m in 1:N_ex
-                            cont_fund_l += gamma_p[o, index_s[l, 1], m] * TTT1[i, j, m, 1]
-                            cont_fund_u += gamma_p[o, index_s[l, 1] + 1, m] * TTT1[i, j, m, 1]
-                            cont_fund_lck += gamma_ck[o, index_s[l, 1], m] * TTT1[i, j, m, 1]
-                            cont_fund_uck += gamma_ck[o, index_s[l, 1] + 1, m] * TTT1[i, j, m, 1]
+                    # Contingency variables precomputed for each j
+                    for o in 1:N_l
+                        # Reset contingency variables at the start of each o loop
+                        cont_fund_u = 0.0
+                        cont_fund_l = 0.0
+                        cont_fund_uck = 0.0
+                        cont_fund_lck = 0.0
+        
+                        for j in 1:N_p
+                            # Accumulate contingency funds for each m
+                            for m in 1:N_ex
+                                cont_fund_l += gamma_p[o, index_s[l, 1], m] * TTT1[i, j, m, 1]
+                                cont_fund_u += gamma_p[o, index_s[l, 1] + 1, m] * TTT1[i, j, m, 1]
+                                cont_fund_lck += gamma_ck[o, index_s[l, 1], m] * TTT1[i, j, m, 1]
+                                cont_fund_uck += gamma_ck[o, index_s[l, 1] + 1, m] * TTT1[i, j, m, 1]
+                            end
+
+                            # Compute TT_nodef and TT_ck based on contingency variables
+                            TT_nodef[j] = cont_fund_l * (debt_l_plus_1_minus_Bline_l / debt_diff) +
+                            cont_fund_u * (Bline_l_minus_debt_l / debt_diff)
+
+                            TT_ck[j] = cont_fund_lck * (debt_l_plus_1_minus_Bline_l / debt_diff) +
+                            cont_fund_uck * (Bline_l_minus_debt_l / debt_diff)
+        
+                            # # Compute TT_nodef and TT_ck based on contingency variables, as in Fortran
+                            # TT_nodef[j] = cont_fund_l * ((debt[index_s[l, 1] + 1, 1] - Bline[l, 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1])) +
+                            # cont_fund_u * ((Bline[l, 1] - debt[index_s[l, 1], 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1]))
+
+                            # TT_ck[j] = cont_fund_lck * ((debt[index_s[l, 1] + 1, 1] - Bline[l, 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1])) +
+                            # cont_fund_uck * ((Bline[l, 1] - debt[index_s[l, 1], 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1]))
+
+                            # Calculate TT_def for each j
+                            cont_fund = 0
+                            for m in 1:N_ex
+                                cont_fund += gamma_a[m] * TTT1[i, j, m, 1]
+                            end
+                            TT_def[j] = cont_fund
+                            safe[j] = TT_ck[j] .>= TT_def[j]  # Broadcasting comparison
                         end
-
-                        # Compute TT_nodef and TT_ck based on contingency variables
-                        TT_nodef[j] = cont_fund_l * (debt_l_plus_1_minus_Bline_l / debt_diff) +
-                        cont_fund_u * (Bline_l_minus_debt_l / debt_diff)
-
-                        TT_ck[j] = cont_fund_lck * (debt_l_plus_1_minus_Bline_l / debt_diff) +
-                        cont_fund_uck * (Bline_l_minus_debt_l / debt_diff)
-    
-                        # # Compute TT_nodef and TT_ck based on contingency variables, as in Fortran
-                        # TT_nodef[j] = cont_fund_l * ((debt[index_s[l, 1] + 1, 1] - Bline[l, 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1])) +
-                        # cont_fund_u * ((Bline[l, 1] - debt[index_s[l, 1], 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1]))
-
-                        # TT_ck[j] = cont_fund_lck * ((debt[index_s[l, 1] + 1, 1] - Bline[l, 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1])) +
-                        # cont_fund_uck * ((Bline[l, 1] - debt[index_s[l, 1], 1]) / (debt[index_s[l, 1] + 1, 1] - debt[index_s[l, 1], 1]))
-
-                        # Calculate TT_def for each j
-                        cont_fund = 0
-                        for m in 1:N_ex
-                            cont_fund += gamma_a[m] * TTT1[i, j, m, 1]
+        
+                        # Perform weighted sums and update values for each p
+                        for p in 1:N_l
+                            cont_fund = weights' * (safe .* max.(TT_def, TT_nodef) .+
+                                                    (1 .- safe) .* (pi_y[i] .* TT_def .+ 
+                                                    (1 .- pi_y[i]) .* max.(TT_def, TT_nodef)))
+        
+                            # Avoid unnecessary recalculations by storing the common terms
+                            common_spend = max(exp(y_y[i]) - lam[p, 1] * debt[k, 1] + 
+                                                q_old[l, o, o, price_index[1, i]] * Bline[l, 1] - 
+                                                q_old[l, o, p, price_index[1, i]] * (1 .- lam[p, 1]) * debt[k, 1] - 
+                                                g_star, 0.005)
+        
+                            value_pay[i, p, k, kk, o] = (common_spend^(1 - sigma) - 1) / (1 - sigma) + 
+                                                        (beta * π^(-1.5)) * cont_fund[1] - 
+                                                        alpha * ((1 / (4 * lam[o, 1])) - d_upper)^2
                         end
-                        TT_def[j] = cont_fund
-                        safe[j] = TT_ck[j] .>= TT_def[j]  # Broadcasting comparison
-                    end
-    
-                    # Perform weighted sums and update values for each p
-                    for p in 1:N_l
-                        cont_fund = weights' * (safe .* max.(TT_def, TT_nodef) .+
-                                                (1 .- safe) .* (pi_y[i] .* TT_def .+ 
-                                                (1 .- pi_y[i]) .* max.(TT_def, TT_nodef)))
-    
-                        # Avoid unnecessary recalculations by storing the common terms
-                        common_spend = max(exp(y_y[i]) - lam[p, 1] * debt[k, 1] + 
-                                            q_old[l, o, o, price_index[1, i]] * Bline[l, 1] - 
-                                            q_old[l, o, p, price_index[1, i]] * (1 .- lam[p, 1]) * debt[k, 1] - 
-                                            g_star, 0.005)
-    
-                        value_pay[i, p, k, kk, o] = (common_spend^(1 - sigma) - 1) / (1 - sigma) + 
-                                                    (beta * π^(-1.5)) * cont_fund[1] - 
-                                                    alpha * ((1 / (4 * lam[o, 1])) - d_upper)^2
-                    end
+                    end    
                 end
             end
         end
